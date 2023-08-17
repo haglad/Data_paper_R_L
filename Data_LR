@@ -1,0 +1,1060 @@
+#Get the library
+library (spatstat)
+library(openxlsx) #my files are in .xlsx format, if yours are .csv, ignore this package
+library(tidyr)
+library(dplyr)
+#Get the library
+library (spatstat)
+library(openxlsx) #my files are in .xlsx format, if yours are .csv, ignore this package
+library(tidyr)
+library(dplyr)
+library(iNEXT)
+
+#read in the data
+Data <- read.xlsx("C:/plot4/NNN_04_Har2017_7_formatting.xlsx")
+Data$species <- Data$scientificName
+species <- table(Data$scientificName)
+species <- as.data.frame(species)
+
+
+#-------------------------------------------------------------------------------
+#for species richness, evenness, abundance
+#-------------------------------------------------------------------------------
+
+#species stats
+chao.rich <- ChaoRichness(species$Freq, datatype = "abundance", conf = 0.95)
+chao.rich
+chao.simp <- ChaoSimpson(species$Freq, datatype="abundance", transform = FALSE, conf = 0.95, B = 200)
+chao.simp
+chao.shan <- ChaoShannon(species$Freq, datatype="abundance", transform = FALSE, conf = 0.95, B = 200)
+chao.shan
+
+#-------------------------------------------------------------------------------
+#for assessing ripley's K, nni
+#-------------------------------------------------------------------------------
+
+#read in the data
+Data <- read.xlsx("C:/plot4/NNN_04_Har2017_7_formatting.xlsx")
+Data$species <- Data$scientificName
+species <- table(Data$scientificName)
+species <- as.data.frame(species)
+
+
+Data <- Data %>% 
+  filter(!is.na(Xlocal))
+
+#Set a window for the plot (say x and y are 1:100, also add some margin)
+Plot <- owin(c(-10,110), c(-10,110))
+
+
+#Now - for your data these might be the steps you take
+
+sp <- unique(Data$species) #vector of all species names (for looping)
+nndist <- vector()    #empty vector for nearest neighbour distances
+e_nndist <- vector()  #empty vector for the expected nndist if entirely random
+Plot <- owin(xrange=c(min(Data$Xlocal), max(Data$Xlocal)), 
+             yrange=c(min(Data$Ylocal), max(Data$Ylocal)),  
+             unitname=c("metre","metres"))
+
+Data$nndist <- NA
+
+#Now loop through each species to get expected and actual nearest neighbour distances
+for (i in 1: length(sp)){
+  rows <- which(Data$species == sp[i])
+  if (length(rows) == 1) {
+    e_nndist <- c(e_nndist, NA)
+    Data$nndist[rows] <- NA
+  } else {
+    temp <- subset(Data, species == sp[i])  #subset the data to the species
+    temp_p <- ppp(temp$Xlocal, temp$Ylocal, Plot,                #create point pattern
+                  check = TRUE, checkdup = TRUE, drop = TRUE,    
+                  marks = temp$measurementValue)                 #adding DBH values 
+    
+    #expected nearest neighbour distance (gives you one value per species)
+    e_nndist <- c(e_nndist, sqrt(area(Plot) / npoints(temp_p))) 
+    #actual distances of each point to nearest neighbour (one value per point)
+    Data$nndist[rows] <- nndist(temp_p)
+  }
+}
+
+#Now generate a dataframe with a row for each species
+#(species name and expected nearest neighbour distance)
+spData <- data.frame("species" = sp, "e_nndist" = e_nndist)
+
+#Order this alphabetically - as the below aggregate function will output alphabetically
+spData <- spData[order(spData$species), ]
+
+#Add the mean nearest neighbour distance by species (could also use median)
+spData$mean_nndist <- aggregate(Data$nndist, by=list(Data$species), FUN=mean)$x
+
+#Now just divide your result by the expected value
+# if it is close to zero you have lots of aggregation, if close to 1 then none
+spData$nni <-  spData$mean_nndist / spData$e_nndist
+
+#finding the mean of all nni
+spData_nona <- spData %>% filter(!is.na(nni))
+(print(spData_nona))
+meannni <- mean(spData_nona$nni)
+
+#finding which nni >1
+nni_1 <- as.data.frame(spData %>% filter(nni >= 1))
+print(nni_1)
+
+#finding which nni <.5
+nni_05 <- as.data.frame(spData %>% filter(nni < 0.3))
+print(nni_05)
+
+print(species)
+
+#Plot a histogram
+library(ggplot2)
+ggplot(spData, aes(x = nni, fill = species)) + 
+  geom_histogram(binwidth=0.1, colour = "#8B5A00", fill = "#CD8500") + #modifying the colour and width of the bars
+  geom_vline(aes(xintercept = 0.5),                                      #adding a line to show species nni >= 1
+  colour = "black", linetype = "dashed", size=1) +                     #making that line black and dashed
+  theme_bw() +                                                         #removing gray background
+  labs(title = "Nearest Neighbour of Species in Team Plot 4 (n=59)",   #labels
+       y = "species count", x= "nni")
+
+data <- data.frame(values = c(spData$nni),
+                   group = c(spData$species))
+data <- data %>% filter(!is.na(values))
+
+#antje new histogram
+library(ggplot2)
+ggplot(data, aes(x = values, fill = group)) + 
+  geom_histogram(position = "identity", alpha = 0.2, bins = 59, binwidth = )  #modifying the colour and width of the bars
+ 
+
+#checking the species which were included in the analysis (those which were not NA)
+spData %>% filter(!is.na(nni))
+
+#looking at frequencey of species with nni >= 1
+spfilter <- filter(species, Var1 %in% c("Discoglypremna caloneura", 
+                "Erythrophleum suaveolens",
+                   "Terminalia hylodendron"))
+
+#ploting the trees in the plot
+Dataplot <- data.frame(cbind("x"= Data$X_plot, "y" = Data$Y_plot))
+plot(Dataplot)
+
+#which species have a frequency of 1
+filter(species, Freq == 1)
+                       
+
+#===============================================================================
+#                              Team plot 1 Species NNI
+#===============================================================================
+#Get the library
+library (spatstat)
+library(openxlsx)
+library(tidyr)
+library(dplyr)
+
+#read in the data
+Data <- read.xlsx("C:/teamplots/Copy of NNN_01_PlotDump.xlsx")
+
+#filter NAs
+Data <- Data %>% 
+  filter(!is.na(X))
+
+
+species <- table(Data$Species)
+#species <- as.data.frame(species)
+
+#Set a window for the plot (say x and y are 1:100, also add some margin)
+Plot <- owin(c(-10,110), c(-10,110))
+
+
+#Now - for your data these might be the steps you take
+
+sp <- unique(Data$Species) #vector of all species names (for looping)    #watch out species needs to be uppercase Species here!!!
+nndist <- vector()    #empty vector for nearest neighbour distances
+e_nndist <- vector()  #empty vector for the expected nndist if entirely random
+Plot <- owin(xrange=c(min(Data$X), max(Data$X)), 
+             yrange=c(min(Data$Y), max(Data$Y)),  
+             unitname=c("metre","metres"))
+
+Data$nndist <- NA
+
+#Now loop through each species to get expected and actual nearest neighbour distances
+for (i in 1: length(sp)){
+  rows <- which(Data$Species == sp[i])
+  if (length(rows) == 1) {
+    e_nndist <- c(e_nndist, NA)
+    Data$nndist[rows] <- NA
+  } else {
+    temp <- subset(Data, Species == sp[i])  #subset the data to the species
+    temp_p <- ppp(temp$X, temp$Y, Plot,
+                  check = TRUE, checkdup = TRUE, drop = TRUE)  #create point pattern
+    
+    #expected nearest neighbour distance (gives you one value per species)
+    e_nndist <- c(e_nndist, sqrt(area(Plot) / npoints(temp_p))) 
+    #actual distances of each point to nearest neighbour (one value per point)
+    Data$nndist[rows] <- nndist(temp_p)
+  }
+}
+
+#Now generate a dataframe with a row for each species
+#(species name and expected nearest neighbour distance)
+spData <- data.frame("Species" = sp, "e_nndist" = e_nndist)
+
+#Order this alphabetically - as the below aggregate function will output alphabetically
+spData <- spData[order(spData$Species), ]
+
+#Add the mean nearest neighbour distance by species (could also use median)
+spData$mean_nndist <- aggregate(Data$nndist, by=list(Data$Species), FUN=mean)$x
+
+#Now just divide your result by the expected value
+# if it is close to zero you have lots of aggregation, if close to 1 then none
+spData$nni <-  spData$mean_nndist / spData$e_nndist
+
+#finding the mean of all nni
+spData_nona <- spData %>% filter(!is.na(nni))
+(print(spData_nona))
+
+#finding which nni >1
+nni_1 <- as.data.frame(spData %>% filter(nni >= 1))
+print(nni_1)
+
+#Plot a histogram
+library(ggplot2)
+ggplot(spData, aes(x = nni)) + 
+  geom_histogram(binwidth=0.1, colour = "#8B5A00", fill = "pink") + #modifying the colour and width of the bars
+  geom_vline(aes(xintercept = 1),                                      #adding a line to show species nni >= 1
+             colour = "black", linetype = "dashed", size=1) +                     #making that line black and dashed
+  theme_bw() +                                                         #removing gray background
+  labs(title = "Nearest Neighbour of Species in Team Plot 1 (n=42)",   #labels
+       y = "species count", x= "nni")
+
+
+
+print(spData)
+
+
+#checking the species which were included in the analysis (those which were not NA)
+spData %>% filter(!is.na(nni))
+
+#looking at frequencey of species with nni >= 1
+#filter from results 
+spfilter <- filter(species, Var1 %in% c("Dialium zenkeri", "Ongokea gore"))
+print(spfilter)
+
+#ploting the trees in the plot
+Dataplot <- data.frame(cbind("x"= Data$X_plot, "y" = Data$Y_plot))
+plot(Dataplot)
+
+#which species have a frequency of 1
+filter(species, Freq == 1)
+
+
+#===============================================================================
+# making species list for each plot
+#===============================================================================
+#read in plot data
+plot1 <- read.xlsx("C:/teamplots/Copy of NNN_01_PlotDump_1_xynew.xlsx")
+plot2 <- read.xlsx("C:/teamplots/Copy of NNN_02_PlotDump_1_xynew.xlsx")
+plot3 <- read.xlsx("C:/teamplots/Copy of NNN_03_PlotDump_1_xynew.xlsx")
+plot4 <- read.xlsx("C:/plot4/NNN_04_Har2017_6_xyfixed.xlsx")
+plot5 <- read.xlsx("C:/teamplots/Copy of NNN_05_PlotDump_1_xynew.xlsx")
+plot6 <- read.xlsx("C:/teamplots/Copy of NNN_06_PlotDump_1_xynew.xlsx")
+
+#making species tables for each plot
+Splist1 <- table(plot1$Species)
+Splist2 <- table(plot2$Species)
+Splist3 <- table(plot3$Species)
+Splist4 <- table(plot4$scientificName)
+Splist5 <- table(plot5$Species)
+Splist6 <- table(plot6$Species)
+
+Splist1 <- as.data.frame(Splist1)
+Splist2 <- as.data.frame(Splist2)
+Splist3 <- as.data.frame(Splist3)
+Splist4 <- as.data.frame(Splist4)
+Splist5 <- as.data.frame(Splist5)
+Splist6 <- as.data.frame(Splist6)
+
+
+#un tag if need to
+#combining the datasets to make one super list of species from Team plots 1-6
+#bind <- full_join(Splist1, Splist2, by = "Var1")
+#bind <- full_join(bind, Splist3, by = "Var1")
+#bind <- full_join(bind, Splist5, by = "Var1" )
+#bind <- full_join(bind, Splist6, by = "Var1")
+#bind <- full_join(bind, Splist4, by = "Var1", copy = TRUE)
+
+#bind <- as.data.frame(bind)
+
+#removing unnecessary columns of species frequency, since this is being sent to david
+#df<- subset(bind, select = -c(Freq.x, Freq.y, Freq.x.x, Freq.y.y, Freq.x.x.x, Freq.y.y.y))
+#df <- unique(df)
+
+#write.csv(df, "C:/teamplots/TEAM_species.csv")
+
+
+#===============================================================================
+# life history traits
+#===============================================================================
+#lht list from david, originally "df", but now with a life history trait column
+lht<- read.csv("C:/plot4/team_sp_lht.csv")
+
+library(data.table)
+
+#matching the life history trait list created by DHJ to each species list
+ss1 <- subset(lht, Var1 %in% Splist1$Var1)
+ss2 <- subset(lht, Var1 %in% Splist2$Var1)
+ss3 <- subset(lht, Var1 %in% Splist3$Var1)
+ss4 <- subset(lht, Var1 %in% Splist4$Var1)
+ss5 <- subset(lht, Var1 %in% Splist5$Var1)
+ss6 <- subset(lht, Var1 %in% Splist6$Var1)
+
+#adding the lht back into the plot data
+plot1 <- left_join(plot1, ss1, by = c('Species' = 'Var1'))
+plot2 <- left_join(plot2, ss2, by = c('Species' = 'Var1'))
+plot3 <- left_join(plot3, ss3, by = c('Species' = 'Var1'))
+plot4 <- left_join(plot4, ss4, by = c('scientificName' = 'Var1')) #this one is formatted a little differently because it is the one i have worked on
+plot5 <- left_join(plot5, ss5, by = c('Species' = 'Var1'))
+plot6 <- left_join(plot6, ss6, by = c('Species' = 'Var1'))
+
+#===============================================================================
+#                              Team plot 4 LHT NNI
+#===============================================================================
+#Get the library
+library (spatstat)
+library(openxlsx)
+library(tidyr)
+library(dplyr)
+
+
+#read in the data
+Data <- plot4
+Data$Life.history
+Data$species <- Data$scientificName
+LH <- table(Data$Life.history) #made a vector for the LH traits 
+LH <- as.data.frame(LH) #cleaned LH into a data frame
+
+Pioneers <- filter(Data, Life.history == "Pioneer")
+Pioneers <- Pioneers %>% 
+  filter(!is.na(Xlocal))
+species <- table(Pioneers$species)
+Shade <- filter(Data, Life.history == "Shade tolerant")
+Shade <- Shade %>% 
+  filter(!is.na(Xlocal))
+
+#To only look at one species, G. suavolens
+
+green <- Data %>% subset(scientificName == "Greenwayodendron suaveolens")
+green <- green %>% filter(!is.na(Xlocal))
+table(green$species)
+
+gr <-  ppp(green$Xlocal, green$Ylocal, Plot,                #create point pattern
+          check = TRUE, checkdup = TRUE, drop = TRUE,    
+          marks = green$measurementValue)
+summary(gr)
+
+
+Greenwayodendron_suaveolens <- envelope(gr, fun = Kest, nrank = 2, nsim = 99)
+plot(Greenwayodendron_suaveolens)
+
+Greenwayodendron_suaveolens <- envelope(gr, fun = Fest, nrank = 2, nsim = 99)
+
+plot(gplot)
+
+#Looking at k of pioneers
+
+pioneers_team4 <- envelope(p, fun = Kest, nrank = 2, nsim = 99)
+plot(pioneers_team4)
+
+shade_tolerant_team4 <- envelope(s, fun = Kest, nrank = 2, nsim = 99)
+plot(shade_tolerant_team4)
+
+splot <- envelope(s, fun = Fest, r = r, nrank = 2, nsim = 99)
+plot(splot)
+
+
+p <-  ppp(Pioneers$Xlocal, Pioneers$Ylocal, Plot,               
+              check = TRUE, checkdup = TRUE, drop = TRUE,    
+              marks = Pioneers$measurementValue)                 
+
+Pioneers <- envelope(p, fun = Kest, nrank = 2, nsim = 99)
+plot(pioneers_TEAM_plot_4)
+
+
+#Now loop through each Life history traits to get expected and actual nearest neighbour distances
+for (i in 1: length(sp)){
+  rows <- which(Data$Life.history == sp[i])
+  if (length(rows) == 1) {
+    e_nndist <- c(e_nndist, NA)
+    Data$nndist[rows] <- NA
+  } else {
+    temp <- subset(Data, Life.history  == sp[i])  #subset the data to the species
+    temp_p <- ppp(temp$Xlocal, temp$Ylocal, Plot,                #create point pattern
+                  check = TRUE, checkdup = TRUE, drop = TRUE,    
+                  marks = temp$measurementValue)                 #adding DBH values 
+    
+    #expected nearest neighbour distance (gives you one value per LHT)
+    e_nndist <- c(e_nndist, sqrt(area(Plot) / npoints(temp_p))) 
+    #actual distances of each point to nearest neighbour (one value per point)
+    Data$nndist[rows] <- nndist(temp_p)
+  }
+}
+
+#Now generate a dataframe with a row for each species
+#(LHT name and expected nearest neighbour distance)
+spData <- data.frame("LH" = sp, "e_nndist" = e_nndist) #here i replaced 'species' (sp) with the 'life.history' trait (LH)
+
+#Order this alphabetically - as the below aggregate function will output alphabetically
+spData <- spData[order(spData$LH), ] #again switched this to LH
+
+#Add the mean nearest neighbour distance by LH (could also use median)
+spData$mean_nndist <- aggregate(Data$nndist, by=list(Data$Life.history), FUN=mean)$x 
+
+#Now just divide your result by the expected value
+# if it is close to zero you have lots of aggregation, if close to 1 then none
+spData$nni <-  spData$mean_nndist / spData$e_nndist
+
+
+#finding which nni >1
+nni_1 <- as.data.frame(spData %>% filter(nni >= 1))
+print(nni_1) #here, none are clumped
+
+#Plot a histogram
+library(ggplot2)
+
+ggplot(spData, aes(x = nni, fill =  LH)) + 
+  geom_histogram(position = "identity", alpha = 0.2, bins = 50)
+
+hist4<- ggplot(spData, aes(x = nni, fill = species)) + 
+  geom_histogram(just = 0,
+           position = "identity",  alpha = 0.2, bins = 50,
+           show.legend = TRUE,
+           colour = spData$LH, fill = "#CD8500") + #modifying the colour and width of the bars
+  geom_vline(aes(xintercept = 0.5),                                      #adding a line to show nni = 0.5 (if =0.5 as clump/aggregated as expected)
+             colour = "black", linetype = "dashed", size= 1) +                   #making that line black and dashed
+  theme_bw() +                                                         #removing gray background
+  labs(title = "Nearest Neighbour of Species in Team Plot 4",   #labels
+       y = "LHT count", x= "nni") +
+  scale_x_continuous(limits = c(0, 1))
+
+#save histogram to file
+ggsave("C:/teamplots/nni_plots/hist_p4.jpg", plot = hist4)
+
+print(spData)
+
+#antje new histogram
+library(ggplot2)
+ggplot(spData, aes(x = nni), fill = Life.history) + 
+  geom_histogram(position = "identity", alpha = 0.2, bins = 59, binwidth = )  #modifying the colour and width of the bars
+
+
+#plotting Gest
+G <- Gest(temp_p, r=NULL, breaks=NULL,
+     correction=c("rs", "km", "han"),
+     domain=NULL)
+plot(G)
+
+
+#ploting the trees in the plot
+my_colors <- c("Pioneers" = "#E15759",
+               "Shade bearers" = "#59A14F")
+library(ggplot2)
+library(ggrepel)
+
+p4 <- ggplot(plot4, aes(Xlocal, Ylocal)) +
+  geom_segment(aes(x = 0, y = 0, xend = 0, yend = 100), color = "blue") +
+  geom_segment(aes(x = 0, y = 100, xend = 100, yend = 100), color = "blue") +
+  geom_segment(aes(x = 100, y = 0, xend = 100, yend = 100), color = "blue") +
+  geom_segment(aes(x = 0, y = 0, xend = 100, yend = 0), color = "blue") +
+  geom_point(alpha = 0.50, aes(size = DBH4.7 , color = Life.history)) +
+  scale_fill_manual(values = c("orange", "magenta")) +
+  scale_colour_manual(values = c("orange", "magenta"),
+                      labels = c("Pioneer", "Shade tolerant")) + 
+  scale_size(range = c(2, 10), name = "DBH (mm)") +
+  scale_x_continuous(limits = c(-5, 105), breaks = seq(0, 100, 20)) +
+  scale_y_continuous(limits = c(-5, 105), breaks = seq(0, 100, 20)) +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.major = element_line(color = "black")) +
+  labs(title = "Life History Traits in TEAM Plot 4",
+       x = "X (m)",
+       y = "Y (m)",
+       fill = "Life.history",
+       colour = "Life.history")+
+  geom_text_repel(aes(label = catalogNumber ), size = 2, max.overlaps = 20)
+
+#save plot
+ggsave("C:/teamplots/nni_plots/nni_p4.jpg", plot = p4, width = 12, height = 10, dpi = 300)  
+
+
+#which species have a frequency of 1
+filter(species, Freq == 1)
+#===============================================================================
+
+#===============================================================================
+#                  Team plot 4 LHT NNI -- XY FIXED
+#===============================================================================
+#Get the library
+library (spatstat)
+library(openxlsx)
+library(tidyr)
+library(dplyr)
+
+#using the fixed x y
+# xa = ya
+ #100-ya = xb
+
+#read in the data
+Data <- plot4
+Data$species <- Data$scientificName
+LH <- table(Data$Life.history.y) #made a vector for the LH traits
+LH <- as.data.frame(LH) #cleaned LH into a data frame
+
+
+#remember to remove all NA values!
+Data <- Data %>% 
+  filter(!is.na(Xlocal)) #those which do not have xy data
+
+Data <- Data %>% 
+  filter(!is.na(Life.history.y)) #those which were not given a LH score.
+
+#Set a window for the plot (say x and y are 1:100, also add some margin)
+Plot <- owin(c(-10,110), c(-10,110))
+
+
+#Now - for your data these might be the steps you take
+
+sp <- unique(Data$Life.history.y) #vector of all life history types, for looping
+nndist <- vector()    #empty vector for nearest neighbour distances
+e_nndist <- vector()  #empty vector for the expected nndist if entirely random
+Plot <- owin(xrange=c(min(Data$Xlocal), max(Data$Xlocal)), 
+             yrange=c(min(Data$Ylocal), max(Data$Ylocal)),  
+             unitname=c("metre","metres"))
+
+Data$nndist <- NA
+
+#Now loop through each Life history traits to get expected and actual nearest neighbour distances
+for (i in 1: length(sp)){
+  rows <- which(Data$Life.history.y == sp[i])
+  if (length(rows) == 1) {
+    e_nndist <- c(e_nndist, NA)
+    Data$nndist[rows] <- NA
+  } else {
+    temp <- subset(Data, Life.history.y  == sp[i])  #subset the data to the species
+    temp_p <- ppp(temp$Xlocal, temp$Ylocal, Plot,                #create point pattern
+                  check = TRUE, checkdup = TRUE, drop = TRUE,    
+                  marks = temp$measurementValue)                 #adding DBH values 
+    
+    #expected nearest neighbour distance (gives you one value per LHT)
+    e_nndist <- c(e_nndist, sqrt(area(Plot) / npoints(temp_p))) 
+    #actual distances of each point to nearest neighbour (one value per point)
+    Data$nndist[rows] <- nndist(temp_p)
+  }
+}
+
+#Now generate a dataframe with a row for each species
+#(LHT name and expected nearest neighbour distance)
+spData <- data.frame("LH" = sp, "e_nndist" = e_nndist) #here i replaced 'species' (sp) with the 'life.history' trait (LH)
+
+#Order this alphabetically - as the below aggregate function will output alphabetically
+spData <- spData[order(spData$LH), ] #again switched this to LH
+
+#Add the mean nearest neighbour distance by LH (could also use median)
+spData$mean_nndist <- aggregate(Data$nndist, by=list(Data$Life.history.y), FUN=mean)$x 
+
+#Now just divide your result by the expected value
+# if it is close to zero you have lots of aggregation, if close to 1 then none
+spData$nni <-  spData$mean_nndist / spData$e_nndist
+
+
+#finding which nni >1
+nni_1 <- as.data.frame(spData %>% filter(nni >= 1))
+print(nni_1) #here, none are clumped
+
+#Plot a histogram
+library(ggplot2)
+
+ggplot(spData, aes(x = nni, fill =  LH)) + 
+  geom_histogram(position = "identity", alpha = 0.2, bins = 50)
+
+hist4<- ggplot(spData, aes(x = nni)) + 
+  geom_bar(just = 0,
+           position = "stack",
+           show.legend = TRUE,
+           colour = "#8B5A00", fill = "#CD8500") + #modifying the colour and width of the bars
+  geom_vline(aes(xintercept = 0.5),                                      #adding a line to show nni = 0.5 (if =0.5 as clump/aggregated as expected)
+             colour = "black", linetype = "dashed", size= 1) +                   #making that line black and dashed
+  theme_bw() +                                                         #removing gray background
+  labs(title = "Nearest Neighbour of Species in Team Plot 4",   #labels
+       y = "LHT count", x= "nni") +
+  scale_x_continuous(limits = c(0, 1))
+
+#save histogram to file
+ggsave("C:/teamplots/nni_plots/hist_p4.jpg", plot = hist4)
+
+print(spData)
+
+#plotting Gest
+G <- Gest(temp_p, r=NULL, breaks=NULL,
+          correction=c("rs", "km", "han"),
+          domain=NULL)
+plot(G)
+
+
+#ploting the trees in the plot
+my_colors <- c("Pioneers" = "#E15759",
+               "Shade bearers" = "#59A14F")
+library(ggplot2)
+library(ggrepel)
+
+p4 <- ggplot(plot4, aes(Xlocal, Ylocal)) +
+  geom_segment(aes(x = 0, y = 0, xend = 0, yend = 100), color = "blue") +
+  geom_segment(aes(x = 0, y = 100, xend = 100, yend = 100), color = "blue") +
+  geom_segment(aes(x = 100, y = 0, xend = 100, yend = 100), color = "blue") +
+  geom_segment(aes(x = 0, y = 0, xend = 100, yend = 0), color = "blue") +
+  geom_point(alpha = 0.50, aes(size = DBH4.7 , color = Life.history.y)) +
+  scale_fill_manual(values = c("orange", "magenta")) +
+  scale_colour_manual(values = c("orange", "magenta"),
+                      labels = c("Pioneer", "Shade tolerant")) + 
+  scale_size(range = c(2, 10), name = "DBH (mm)") +
+  scale_x_continuous(limits = c(-5, 105), breaks = seq(0, 100, 20)) +
+  scale_y_continuous(limits = c(-5, 105), breaks = seq(0, 100, 20)) +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.major = element_line(color = "black")) +
+  labs(title = "Life History Traits in TEAM Plot 4",
+       x = "X (m)",
+       y = "Y (m)",
+       fill = "Life.history.y",
+       colour = "Life.history.y")+
+  geom_text_repel(aes(label = tagno ), size = 2, max.overlaps = 20)
+
+print(p4)
+
+#save plot
+ggsave("C:/teamplots/nni_plots/nni_p4_new.jpg", plot = p4, width = 12, height = 10, dpi = 300)  
+
+
+#which species have a frequency of 1
+filter(species, Freq == 1)
+
+#===============================================================================
+#                              Team plot 1 LHT NNI
+#===============================================================================
+#Get the library
+library (spatstat)
+library(openxlsx)
+library(tidyr)
+library(dplyr)
+
+
+
+#read in the data
+Data <- plot1
+Data$species <- Data$scientificName
+LH <- table(Data$Life.history) #made a vector for the LH traits 
+LH <- as.data.frame(LH) #cleaned LH into a data frame
+
+#remember to remove all NA values!
+Data <- Data %>% 
+  filter(!is.na(Xb)) #those which do not have xy data
+
+Data <- Data %>% 
+  filter(!is.na(Life.history)) #those which were not given a LH score.
+
+#Set a window for the plot (say x and y are 1:100, also add some margin)
+Plot <- owin(c(-10,110), c(-10,110))
+
+
+#Now - for your data these might be the steps you take
+
+sp <- unique(Data$Life.history) #vector of all life history types, for looping
+nndist <- vector()    #empty vector for nearest neighbour distances
+e_nndist <- vector()  #empty vector for the expected nndist if entirely random
+Plot <- owin(xrange=c(min(Data$Xb), max(Data$Xb)), 
+             yrange=c(min(Data$Yb), max(Data$Yb)),  
+             unitname=c("metre","metres"))
+
+Data$nndist <- NA
+
+#Now loop through each Life history traits to get expected and actual nearest neighbour distances
+for (i in 1: length(sp)){
+  rows <- which(Data$Life.history == sp[i])
+  if (length(rows) == 1) {
+    e_nndist <- c(e_nndist, NA)
+    Data$nndist[rows] <- NA
+  } else {
+    temp <- subset(Data, Life.history  == sp[i])  #subset the data to the species
+    temp_p <- ppp(temp$Xb, temp$Yb, Plot,                #create point pattern #change to X and Y for Forestplot dataset
+                  check = TRUE, checkdup = TRUE, drop = TRUE,    
+                  marks = temp$measurementValue)                 #adding DBH values 
+    
+    #expected nearest neighbour distance (gives you one value per LHT)
+    e_nndist <- c(e_nndist, sqrt(area(Plot) / npoints(temp_p))) 
+    #actual distances of each point to nearest neighbour (one value per point)
+    Data$nndist[rows] <- nndist(temp_p)
+  }
+}
+
+#Now generate a dataframe with a row for each species
+#(LHT name and expected nearest neighbour distance)
+spData <- data.frame("LH" = sp, "e_nndist" = e_nndist) #here i replaced 'species' (sp) with the 'life.history' trait (LH)
+
+#Order this alphabetically - as the below aggregate function will output alphabetically
+spData <- spData[order(spData$LH), ] #again switched this to LH
+
+#Add the mean nearest neighbour distance by LH (could also use median)
+spData$mean_nndist <- aggregate(Data$nndist, by=list(Data$Life.history), FUN=mean)$x 
+
+#Now just divide your result by the expected value
+# if it is close to zero you have lots of aggregation, if close to 1 then none
+spData$nni <-  spData$mean_nndist / spData$e_nndist
+
+
+#finding which nni >1
+nni_1 <- as.data.frame(spData %>% filter(nni >= 1))
+print(nni_1) #here, none are clumped
+
+#Plot a histogram
+library(ggplot2)
+
+hist1 <- ggplot(spData, aes(x = nni)) + 
+  geom_bar(just = 0,
+           position = "stack",
+           show.legend = TRUE,
+           colour = "#8B5A00", fill = "#CD8500") + #modifying the colour and width of the bars
+  geom_vline(aes(xintercept = 0.5),                                      #adding a line to show nni = 0.5 (if =0.5 as clump/aggregated as expected)
+             colour = "black", linetype = "dashed", size= 1) +                   #making that line black and dashed
+  theme_bw() +                                                         #removing gray background
+  labs(title = "Nearest Neighbour of Species in Team Plot 1",   #labels
+       y = "LHT count", x= "nni") +
+  scale_x_continuous(limits = c(0, 1))
+
+print(hist1)
+#save histogram to file
+ggsave("C:/teamplots/nni_plots/hist_p1.jpg", plot = hist1)
+
+print(spData)
+
+#plotting Gest
+G <- Gest(temp_p, r=NULL, breaks=NULL,
+          correction=c("rs", "km", "han"),
+          domain=NULL)
+plot(G)
+
+
+#ploting the trees in the plot
+my_colors <- c("Pioneers" = "#E15759",
+               "Shade bearers" = "#59A14F")
+
+p1 <- ggplot(plot1, aes(Xb, Yb)) +
+  geom_segment(aes(x = 0, y = 0, xend = 0, yend = 100), color = "blue") +
+  geom_segment(aes(x = 0, y = 100, xend = 100, yend = 100), color = "blue") +
+  geom_segment(aes(x = 100, y = 0, xend = 100, yend = 100), color = "blue") +
+  geom_segment(aes(x = 0, y = 0, xend = 100, yend = 0), color = "blue") +
+  geom_point(alpha = 0.50, aes(size = DBH4 , color = Life.history)) +
+  scale_fill_manual(values = c("orange", "magenta")) +
+  scale_colour_manual(values = c("orange", "magenta"),
+                      labels = c("Pioneer", "Shade tolerant")) + 
+  scale_size(range = c(2, 10), name = "DBH (mm)") +
+  scale_x_continuous(limits = c(-5, 105), breaks = seq(0, 100, 20)) +
+  scale_y_continuous(limits = c(-5, 105), breaks = seq(0, 100, 20)) +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.major = element_line(color = "black")) +
+  labs(title = "Life History Traits in TEAM Plot 1",
+       x = "X (m)",
+       y = "Y (m)",
+       fill = "Life.history",
+       colour = "Life.history") +
+  geom_text_repel(aes(label = Tag.No ), size = 2, max.overlaps = 20) 
+
+ggsave("C:/teamplots/nni_plots/nni_p1.jpg", plot = p1, width = 12, height = 10, dpi = 300)  
+
+
+#which species have a frequency of 1
+filter(species, Freq == 1)
+
+
+#===============================================================================
+#                              Team plot 2 LHT NNI
+#===============================================================================
+#Get the library
+library (spatstat)
+library(openxlsx)
+library(tidyr)
+library(dplyr)
+
+
+
+#read in the data
+Data <- plot2
+Data$species <- Data$scientificName
+LH <- table(Data$Life.history) #made a vector for the LH traits 
+LH <- as.data.frame(LH) #cleaned LH into a data frame
+
+#remember to remove all NA values!
+Data <- Data %>% 
+  filter(!is.na(X)) #those which do not have xy data
+
+Data <- Data %>% 
+  filter(!is.na(Life.history)) #those which were not given a LH score.
+
+#Set a window for the plot (say x and y are 1:100, also add some margin)
+Plot <- owin(c(-10,110), c(-10,110))
+
+
+#Now - for your data these might be the steps you take
+
+sp <- unique(Data$Life.history) #vector of all life history types, for looping
+nndist <- vector()    #empty vector for nearest neighbour distances
+e_nndist <- vector()  #empty vector for the expected nndist if entirely random
+Plot <- owin(xrange=c(min(Data$X), max(Data$X)), 
+             yrange=c(min(Data$Y), max(Data$Y)),  
+             unitname=c("metre","metres"))
+
+Data$nndist <- NA
+
+#Now loop through each Life history traits to get expected and actual nearest neighbour distances
+for (i in 1: length(sp)){
+  rows <- which(Data$Life.history == sp[i])
+  if (length(rows) == 1) {
+    e_nndist <- c(e_nndist, NA)
+    Data$nndist[rows] <- NA
+  } else {
+    temp <- subset(Data, Life.history  == sp[i])  #subset the data to the species
+    temp_p <- ppp(temp$X, temp$Y, Plot,                #create point pattern #change to X and Y for Forestplot dataset
+                  check = TRUE, checkdup = TRUE, drop = TRUE,    
+                  marks = temp$measurementValue)                 #adding DBH values 
+    
+    #expected nearest neighbour distance (gives you one value per LHT)
+    e_nndist <- c(e_nndist, sqrt(area(Plot) / npoints(temp_p))) 
+    #actual distances of each point to nearest neighbour (one value per point)
+    Data$nndist[rows] <- nndist(temp_p)
+  }
+}
+
+#Now generate a dataframe with a row for each species
+#(LHT name and expected nearest neighbour distance)
+spData <- data.frame("LH" = sp, "e_nndist" = e_nndist) #here i replaced 'species' (sp) with the 'life.history' trait (LH)
+
+#Order this alphabetically - as the below aggregate function will output alphabetically
+spData <- spData[order(spData$LH), ] #again switched this to LH
+
+#Add the mean nearest neighbour distance by LH (could also use median)
+spData$mean_nndist <- aggregate(Data$nndist, by=list(Data$Life.history), FUN=mean)$x 
+
+#Now just divide your result by the expected value
+# if it is close to zero you have lots of aggregation, if close to 1 then none
+spData$nni <-  spData$mean_nndist / spData$e_nndist
+
+
+#finding which nni >1
+nni_1 <- as.data.frame(spData %>% filter(nni >= 1))
+print(nni_1) #here, none are clumped
+
+#Plot a histogram
+library(ggplot2)
+
+hist2 <- ggplot(spData, aes(x = nni)) + 
+  geom_bar(just = 0,
+           position = "stack",
+           show.legend = TRUE,
+           colour = "#8B5A00", fill = "#CD8500") + #modifying the colour and width of the bars
+  geom_vline(aes(xintercept = 0.5),                                      #adding a line to show nni = 0.5 (if =0.5 as clump/aggregated as expected)
+             colour = "black", linetype = "dashed", size= 1) +                   #making that line black and dashed
+  theme_bw() +                                                         #removing gray background
+  labs(title = "Nearest Neighbour of Species in Team Plot 2",  #labels
+       y = "LHT count", x= "nni") +
+  scale_x_continuous(limits = c(0, 1))
+
+print(hist2)
+#save histogram to file
+ggsave("C:/teamplots/nni_plots/hist_p2.jpg", plot = hist2)
+
+print(spData)
+
+#plotting Gest
+G <- Gest(temp_p, r=NULL, breaks=NULL,
+          correction=c("rs", "km", "han"),
+          domain=NULL)
+plot(G)
+
+save.image("C:/teamplots/nni_plots/g_p2.jpg", G)
+
+#ploting the trees in the plot
+my_colors <- c("Pioneers" = "#E15759",
+               "Shade bearers" = "#59A14F")
+
+p2 <- ggplot(plot2, aes(X, Y)) +
+  geom_segment(aes(x = 0, y = 0, xend = 0, yend = 100), color = "blue") +
+  geom_segment(aes(x = 0, y = 100, xend = 100, yend = 100), color = "blue") +
+  geom_segment(aes(x = 100, y = 0, xend = 100, yend = 100), color = "blue") +
+  geom_segment(aes(x = 0, y = 0, xend = 100, yend = 0), color = "blue") +
+  geom_point(alpha = 0.50, aes(size = DBH4 , color = Life.history)) +
+  scale_fill_manual(values = c("orange", "magenta")) +
+  scale_colour_manual(values = c("orange", "magenta"),
+                      labels = c("Pioneer", "Shade tolerant")) + 
+  scale_size(range = c(2, 10), name = "DBH (mm)") +
+  scale_x_continuous(limits = c(-5, 105), breaks = seq(0, 100, 20)) +
+  scale_y_continuous(limits = c(-5, 105), breaks = seq(0, 100, 20)) +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.major = element_line(color = "black")) +
+  labs(title = "Life History Traits in TEAM Plot 2",
+       x = "X (m)",
+       y = "Y (m)",
+       fill = "Life.history",
+       colour = "Life.history")+
+geom_text_repel(aes(label = Tag.No ), size = 2, max.overlaps = 20) 
+
+print(p2)
+
+#the function ggsave will actually save the plot into the new folder, with the appropriate dimensions
+ggsave("C:/teamplots/nni_plots/nni_p2.jpg", plot = p2, width = 12, height = 10, dpi = 300)  
+
+
+#===============================================================================
+#                              Team plot 2 LHT NNI
+#===============================================================================
+#Get the library
+library (spatstat)
+library(openxlsx)
+library(tidyr)
+library(dplyr)
+
+
+
+#read in the data
+Data <- plot2
+Data$species <- Data$scientificName
+LH <- table(Data$Life.history) #made a vector for the LH traits 
+LH <- as.data.frame(LH) #cleaned LH into a data frame
+
+#remember to remove all NA values!
+Data <- Data %>% 
+  filter(!is.na(X)) #those which do not have xy data
+
+Data <- Data %>% 
+  filter(!is.na(Life.history)) #those which were not given a LH score.
+
+#Set a window for the plot (say x and y are 1:100, also add some margin)
+Plot <- owin(c(-10,110), c(-10,110))
+
+
+#Now - for your data these might be the steps you take
+
+sp <- unique(Data$Life.history) #vector of all life history types, for looping
+nndist <- vector()    #empty vector for nearest neighbour distances
+e_nndist <- vector()  #empty vector for the expected nndist if entirely random
+Plot <- owin(xrange=c(min(Data$X), max(Data$X)), 
+             yrange=c(min(Data$Y), max(Data$Y)),  
+             unitname=c("metre","metres"))
+
+Data$nndist <- NA
+
+#Now loop through each Life history traits to get expected and actual nearest neighbour distances
+for (i in 1: length(sp)){
+  rows <- which(Data$Life.history == sp[i])
+  if (length(rows) == 1) {
+    e_nndist <- c(e_nndist, NA)
+    Data$nndist[rows] <- NA
+  } else {
+    temp <- subset(Data, Life.history  == sp[i])  #subset the data to the species
+    temp_p <- ppp(temp$X, temp$Y, Plot,                #create point pattern #change to X and Y for Forestplot dataset
+                  check = TRUE, checkdup = TRUE, drop = TRUE,    
+                  marks = temp$measurementValue)                 #adding DBH values 
+    
+    #expected nearest neighbour distance (gives you one value per LHT)
+    e_nndist <- c(e_nndist, sqrt(area(Plot) / npoints(temp_p))) 
+    #actual distances of each point to nearest neighbour (one value per point)
+    Data$nndist[rows] <- nndist(temp_p)
+  }
+}
+
+#Now generate a dataframe with a row for each species
+#(LHT name and expected nearest neighbour distance)
+spData <- data.frame("LH" = sp, "e_nndist" = e_nndist) #here i replaced 'species' (sp) with the 'life.history' trait (LH)
+
+#Order this alphabetically - as the below aggregate function will output alphabetically
+spData <- spData[order(spData$LH), ] #again switched this to LH
+
+#Add the mean nearest neighbour distance by LH (could also use median)
+spData$mean_nndist <- aggregate(Data$nndist, by=list(Data$Life.history), FUN=mean)$x 
+
+#Now just divide your result by the expected value
+# if it is close to zero you have lots of aggregation, if close to 1 then none
+spData$nni <-  spData$mean_nndist / spData$e_nndist
+
+
+#finding which nni >1
+nni_1 <- as.data.frame(spData %>% filter(nni >= 1))
+print(nni_1) #here, none are clumped
+
+#Plot a histogram
+library(ggplot2)
+
+hist2 <- ggplot(spData, aes(x = nni)) + 
+  geom_bar(just = 0,
+           position = "stack",
+           show.legend = TRUE,
+           colour = "#8B5A00", fill = "#CD8500") + #modifying the colour and width of the bars
+  geom_vline(aes(xintercept = 0.5),                                      #adding a line to show nni = 0.5 (if =0.5 as clump/aggregated as expected)
+             colour = "black", linetype = "dashed", size= 1) +                   #making that line black and dashed
+  theme_bw() +                                                         #removing gray background
+  labs(title = "Nearest Neighbour of Species in Team Plot 2",  #labels
+       y = "LHT count", x= "nni") +
+  scale_x_continuous(limits = c(0, 1))
+
+print(hist2)
+#save histogram to file
+ggsave("C:/teamplots/nni_plots/hist_p2.jpg", plot = hist2)
+
+print(spData)
+
+#plotting Gest
+G <- Gest(temp_p, r=NULL, breaks=NULL,
+          correction=c("rs", "km", "han"),
+          domain=NULL)
+plot(G)
+
+save.image("C:/teamplots/nni_plots/g_p2.jpg", G)
+
+#ploting the trees in the plot
+my_colors <- c("Pioneers" = "#E15759",
+               "Shade bearers" = "#59A14F")
+
+p2 <- ggplot(plot2, aes(X, Y)) +
+  geom_segment(aes(x = 0, y = 0, xend = 0, yend = 100), color = "blue") +
+  geom_segment(aes(x = 0, y = 100, xend = 100, yend = 100), color = "blue") +
+  geom_segment(aes(x = 100, y = 0, xend = 100, yend = 100), color = "blue") +
+  geom_segment(aes(x = 0, y = 0, xend = 100, yend = 0), color = "blue") +
+  geom_point(alpha = 0.50, aes(size = DBH4 , color = Life.history)) +
+  scale_fill_manual(values = c("orange", "magenta")) +
+  scale_colour_manual(values = c("orange", "magenta"),
+                      labels = c("Pioneer", "Shade tolerant")) + 
+  scale_size(range = c(2, 10), name = "DBH (mm)") +
+  scale_x_continuous(limits = c(-5, 105), breaks = seq(0, 100, 20)) +
+  scale_y_continuous(limits = c(-5, 105), breaks = seq(0, 100, 20)) +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.major = element_line(color = "black")) +
+  labs(title = "Life History Traits in TEAM Plot 2",
+       x = "X (m)",
+       y = "Y (m)",
+       fill = "Life.history",
+       colour = "Life.history")+
+geom_text_repel(aes(label = Tag.No ), size = 2, max.overlaps = 20) 
+
+print(p2)
+
+#the function ggsave will actually save the plot into the new folder, with the appropriate dimensions
+ggsave("C:/teamplots/nni_plots/nni_p2.jpg", plot = p2, width = 12, height = 10, dpi = 300)  
+
+
+
+
